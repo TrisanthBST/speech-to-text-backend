@@ -106,6 +106,76 @@ export async function transcribeAudio(filePath) {
   }
 }
 
+// New function to transcribe audio from a buffer (for in-memory processing)
+export async function transcribeAudioFromBuffer(fileBuffer, filename) {
+  try {
+    console.log('[Transcription] Starting transcription for buffer, filename:', filename);
+    console.log('[Transcription] Deepgram API Key configured:', !!DEEPGRAM_API_KEY);
+    console.log('[Transcription] Buffer size:', fileBuffer.length, 'bytes');
+    
+    if (fileBuffer.length === 0) {
+      throw new Error('Audio buffer is empty');
+    }
+    
+    if (fileBuffer.length > 10 * 1024 * 1024) {
+      throw new Error('Audio buffer too large (max 10MB)');
+    }
+    
+    if (DEEPGRAM_API_KEY) {
+      console.log('[Transcription] Using Deepgram provider with buffer');
+      try {
+        const result = await transcribeWithDeepgramFromBuffer(fileBuffer, filename);
+        console.log('[Transcription] Deepgram success:', result.text?.substring(0, 100) + '...');
+        return { success: true, provider: 'deepgram', transcription: result.text, confidence: result.confidence, duration: result.duration };
+      } catch (deepgramError) {
+        console.error('[Transcription] Deepgram failed:', {
+          message: deepgramError.message,
+          status: deepgramError.response?.status,
+          statusText: deepgramError.response?.statusText,
+          data: deepgramError.response?.data
+        });
+        console.warn('[Transcription] Falling back to mock service');
+        // Fall back to mock service if Deepgram fails
+        try {
+          const mockTranscription = await mockTranscriptionService(fileBuffer);
+          return { success: true, provider: 'mock', transcription: mockTranscription.text, confidence: mockTranscription.confidence, duration: mockTranscription.duration };
+        } catch (mockError) {
+          console.error('[Transcription] Mock service also failed:', mockError);
+          throw new Error(`Both Deepgram and mock services failed: ${mockError.message}`);
+        }
+      }
+    }
+
+    console.warn('[Transcription] No Deepgram API key configured, using mock service');
+    try {
+      const mockTranscription = await mockTranscriptionService(fileBuffer);
+      return { success: true, provider: 'mock', transcription: mockTranscription.text, confidence: mockTranscription.confidence, duration: mockTranscription.duration };
+    } catch (mockError) {
+      console.error('[Transcription] Mock service failed:', mockError);
+      throw new Error(`Mock service failed: ${mockError.message}`);
+    }
+  } catch (error) {
+    console.error('[Transcription] Critical error from buffer:', {
+      message: error.message,
+      stack: error.stack
+    });
+    
+    // Return a more detailed error message
+    let errorMessage = 'Transcription failed';
+    if (error.response?.data?.message) {
+      errorMessage = `API Error: ${error.response.data.message}`;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    // Create a custom error type for better handling
+    const transcriptionError = new Error(errorMessage);
+    transcriptionError.name = 'TranscriptionError';
+    
+    return { success: false, error: errorMessage };
+  }
+}
+
 // Mock transcription service (replace with actual API integration)
 async function mockTranscriptionService(audioBuffer) {
   // Simulate processing time
@@ -149,6 +219,93 @@ async function transcribeWithDeepgram(filePath) {
     const response = await axios.post(
       `${DEEPGRAM_API_URL}?model=nova-2&smart_format=true&language=en`,
       audioStream,
+      {
+        headers: {
+          Authorization: `Token ${DEEPGRAM_API_KEY}`,
+          'Content-Type': 'application/octet-stream'
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        timeout: 30000 // 30 second timeout
+      }
+    );
+    
+    console.log('[Deepgram] Response status:', response.status);
+    console.log('[Deepgram] Response data structure:', {
+      hasResults: !!response.data?.results,
+      hasChannels: !!response.data?.results?.channels,
+      channelCount: response.data?.results?.channels?.length || 0
+    });
+
+    // Deepgram response schema: response.data.results.channels[0].alternatives[0].transcript
+    const alt = response.data?.results?.channels?.[0]?.alternatives?.[0];
+    if (alt?.transcript !== undefined) {
+      const result = {
+        text: alt.transcript,
+        confidence: typeof alt.confidence === 'number' ? alt.confidence : 1.0,
+        duration: response.data?.metadata?.duration || 0
+      };
+      console.log('[Deepgram] Transcription result:', {
+        textLength: result.text.length,
+        confidence: result.confidence,
+        duration: result.duration
+      });
+      return result;
+    }
+    
+    console.error('[Deepgram] No transcript in response:', JSON.stringify(response.data, null, 2));
+    throw new Error('No transcription result from Deepgram - empty or invalid response');
+    
+  } catch (error) {
+    if (error.response) {
+      console.error('[Deepgram] API Error:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+      
+      if (error.response.status === 401) {
+        throw new Error('Deepgram API authentication failed - invalid API key');
+      } else if (error.response.status === 400) {
+        throw new Error(`Deepgram API error: ${error.response.data?.message || 'Bad request'}`);
+      } else if (error.response.status === 429) {
+        throw new Error('Deepgram API rate limit exceeded');
+      } else {
+        throw new Error(`Deepgram API error (${error.response.status}): ${error.response.data?.message || error.response.statusText || 'Unknown error'}`);
+      }
+    } else if (error.code === 'ECONNREFUSED') {
+      throw new Error('Cannot connect to Deepgram API - network error');
+    } else if (error.code === 'ENOTFOUND') {
+      throw new Error('Deepgram API hostname not found - check internet connection');
+    } else if (error.code === 'ETIMEDOUT') {
+      throw new Error('Deepgram API request timed out');
+    }
+    
+    console.error('[Deepgram] Unexpected error:', error);
+    throw new Error(`Deepgram unexpected error: ${error.message}`);
+  }
+}
+
+// Deepgram transcription from buffer (requires DEEPGRAM_API_KEY)
+async function transcribeWithDeepgramFromBuffer(fileBuffer, filename) {
+  try {
+    console.log('[Deepgram] Processing buffer, filename:', filename);
+    console.log('[Deepgram] Buffer size:', fileBuffer.length, 'bytes');
+    
+    if (fileBuffer.length === 0) {
+      throw new Error('Audio buffer is empty');
+    }
+    
+    if (fileBuffer.length > 10 * 1024 * 1024) {
+      throw new Error('Audio buffer too large (max 10MB)');
+    }
+    
+    console.log('[Deepgram] Making API request to:', `${DEEPGRAM_API_URL}?model=nova-2&smart_format=true&language=en`);
+    
+    const response = await axios.post(
+      `${DEEPGRAM_API_URL}?model=nova-2&smart_format=true&language=en`,
+      fileBuffer,
       {
         headers: {
           Authorization: `Token ${DEEPGRAM_API_KEY}`,

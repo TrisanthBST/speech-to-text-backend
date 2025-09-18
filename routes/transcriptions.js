@@ -1,6 +1,6 @@
 import express from 'express';
 import Transcription from '../models/Transcription.js';
-import { transcribeAudio } from '../services/speechToText.js';
+import { transcribeAudioFromBuffer } from '../services/speechToText.js';
 import { authenticate } from '../middleware/auth.js';
 import multer from 'multer';
 import path from 'path';
@@ -65,12 +65,32 @@ router.post('/', upload.single('audio'), async (req, res) => {
       });
     }
     
+    // Read file content into memory immediately
+    let fileBuffer;
+    try {
+      fileBuffer = fs.readFileSync(filePath);
+    } catch (readError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to read uploaded file'
+      });
+    }
+    
+    // Clean up the uploaded file immediately after reading into memory
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to clean up uploaded file:', cleanupError.message);
+    }
+    
     // Set processing status initially
     const transcription = new Transcription({
       user: req.user._id,
       filename,
       originalName: originalname,
-      filePath,
+      filePath, // We'll keep this for reference but the file is gone
       transcription: '', // Will be updated after processing
       fileSize: size,
       mimeType: mimetype,
@@ -84,18 +104,9 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
     await transcription.save();
     
-    // Process transcription
+    // Process transcription using in-memory file buffer
     const startTime = Date.now();
-    const transcriptionResult = await transcribeAudio(filePath);
-    
-    // Clean up the uploaded file after processing (regardless of success or failure)
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (cleanupError) {
-      console.warn('Failed to clean up uploaded file:', cleanupError.message);
-    }
+    const transcriptionResult = await transcribeAudioFromBuffer(fileBuffer, originalname);
     const processingTime = Date.now() - startTime;
     
     if (!transcriptionResult.success) {
