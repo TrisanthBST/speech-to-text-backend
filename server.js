@@ -69,8 +69,33 @@ app.get("/health", async (req, res) => {
     const envCheck = {
       DEEPGRAM_API_KEY: !!process.env.DEEPGRAM_API_KEY,
       MONGODB_URI: !!process.env.MONGODB_URI,
-      JWT_SECRET: !!process.env.JWT_SECRET
+      JWT_SECRET: !!process.env.JWT_SECRET,
+      FRONTEND_URL: !!process.env.FRONTEND_URL,
+      NODE_ENV: process.env.NODE_ENV || 'not set'
     };
+    
+    // Check if required directories exist
+    const directories = {
+      uploads: fs.existsSync('./uploads'),
+      routes: fs.existsSync('./routes'),
+      services: fs.existsSync('./services')
+    };
+    
+    // Check if required modules can be imported
+    let modules = {};
+    try {
+      await import('./models/Transcription.js');
+      modules.transcriptionModel = 'loaded';
+    } catch (e) {
+      modules.transcriptionModel = `error: ${e.message}`;
+    }
+    
+    try {
+      await import('./services/speechToText.js');
+      modules.speechService = 'loaded';
+    } catch (e) {
+      modules.speechService = `error: ${e.message}`;
+    }
     
     res.json({ 
       status: "healthy",
@@ -78,14 +103,17 @@ app.get("/health", async (req, res) => {
       dependencies: {
         database: dbStatus,
         uploadsDirectory: uploadsDir,
-        environment: envCheck
+        environment: envCheck,
+        directories: directories,
+        modules: modules
       }
     });
   } catch (error) {
     console.error('Health check failed:', error);
     res.status(500).json({ 
       status: "unhealthy",
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -116,6 +144,11 @@ mongoose
   })
   .catch((error) => {
     console.error("MongoDB connection error:", error);
+    // In production, you might want to exit the process if MongoDB connection fails
+    if (process.env.NODE_ENV === 'production') {
+      console.error("Critical: MongoDB connection failed in production. Exiting process.");
+      process.exit(1);
+    }
   });
 
 // For Vercel serverless deployment, we don't need to start the server

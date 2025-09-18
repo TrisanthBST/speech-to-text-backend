@@ -26,6 +26,13 @@ export async function transcribeAudio(filePath) {
       throw new Error('Audio file too large (max 10MB)');
     }
     
+    // Try to read file to check if it's accessible
+    try {
+      fs.readFileSync(filePath);
+    } catch (fileReadError) {
+      throw new Error(`Cannot read audio file: ${fileReadError.message}`);
+    }
+    
     if (DEEPGRAM_API_KEY) {
       console.log('[Transcription] Using Deepgram provider');
       try {
