@@ -19,6 +19,15 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("uploads"));
 
+// Basic health check route
+app.get("/", (req, res) => {
+  res.json({ 
+    message: "Speech-to-Text Backend API", 
+    status: "running",
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/transcriptions", transcriptionRoutes);
@@ -50,3 +59,6 @@ mongoose
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Export for Vercel serverless functions
+export default app;

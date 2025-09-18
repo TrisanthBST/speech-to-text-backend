@@ -146,26 +146,46 @@ The API supports multiple speech-to-text providers:
 
 ## 🚀 Deployment
 
-### Environment Variables for Production
+### Using Vercel (Full-Stack)
 
-Ensure all environment variables are set in your production environment:
+1. **Database Setup (MongoDB Atlas)**:
+   - Go to [MongoDB Atlas](https://www.mongodb.com/atlas)
+   - Create a free account and cluster
+   - Get your connection string
+   - Whitelist all IPs (0.0.0.0/0) for Vercel deployment
 
-```env
-NODE_ENV=production
-PORT=5000
-MONGODB_URI=your-production-mongodb-uri
-JWT_SECRET=your-production-jwt-secret
-JWT_REFRESH_SECRET=your-production-refresh-secret
-DEEPGRAM_API_KEY=your-deepgram-api-key
-FRONTEND_URL=https://your-frontend-domain.com
-```
+2. **Prepare for Vercel Deployment**:
+   - Create `vercel.json` configuration file
+   - Organize API routes for serverless functions
+   - Update CORS configuration for single-domain deployment
 
-### Deployment Platforms
+3. **Deploy Backend to Vercel**:
+   - Push your code to GitHub
+   - Go to [Vercel](https://vercel.com)
+   - Sign up/login with GitHub
+   - Click "New Project" → Import your backend repository
+   - Vercel will detect it as a Node.js project
 
-- **Render**: Connect GitHub repo and set environment variables
-- **Railway**: Easy deployment with automatic HTTPS
-- **Heroku**: Traditional platform with add-ons
-- **Vercel**: Serverless functions (requires adaptation)
+4. **Environment Variables on Vercel**:
+   - In the import dialog or project settings, add:
+   ```
+   NODE_ENV=production
+   MONGODB_URI=your_mongodb_atlas_connection_string
+   JWT_SECRET=your_super_secure_jwt_secret_key_here
+   JWT_REFRESH_SECRET=your_super_secure_refresh_secret_key_here
+   DEEPGRAM_API_KEY=your_deepgram_api_key
+   FRONTEND_URL=https://your-app-name.vercel.app
+   ```
+   
+5. **Vercel Configuration**:
+   - Vercel automatically handles serverless function deployment
+   - API routes will be available at: `https://your-app-name.vercel.app/api/*`
+   - Automatic HTTPS and global CDN included
+
+6. **Post-Deployment**:
+   - Your API will be available at: `https://your-backend-app.vercel.app/api`
+   - Test all endpoints using the Vercel domain
+   - Monitor function logs in Vercel dashboard
 
 ## 🧪 Testing
 
