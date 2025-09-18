@@ -17,6 +17,10 @@ const authLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting in development environments
+  skip: (req, res) => {
+    return process.env.NODE_ENV === 'development';
+  }
 });
 
 

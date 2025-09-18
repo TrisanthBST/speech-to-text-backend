@@ -15,6 +15,12 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Configure Express to trust proxy headers (required for Vercel)
+// This should be set before any middleware that relies on IP addresses
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1); // Trust first proxy
+}
+
 // Middleware
 const corsOptions = {
   origin: function (origin, callback) {
@@ -97,6 +103,12 @@ app.get("/health", async (req, res) => {
       modules.speechService = `error: ${e.message}`;
     }
     
+    // Check server configuration
+    const serverConfig = {
+      trustProxy: app.get('trust proxy') || false,
+      nodeEnv: process.env.NODE_ENV || 'development'
+    };
+    
     res.json({ 
       status: "healthy",
       timestamp: new Date().toISOString(),
@@ -105,7 +117,8 @@ app.get("/health", async (req, res) => {
         uploadsDirectory: uploadsDir,
         environment: envCheck,
         directories: directories,
-        modules: modules
+        modules: modules,
+        server: serverConfig
       }
     });
   } catch (error) {
@@ -124,6 +137,13 @@ app.use("/api/transcriptions", transcriptionRoutes);
 
 // Error handling middleware
 app.use((error, req, res, next) => {
+  // Handle rate limiting errors
+  if (error.code === 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR' || error.code === 'ERR_ERL_FORWARDED_HEADER') {
+    console.warn('Rate limiting proxy header issue (non-critical in Vercel):', error.message);
+    // Continue to next middleware instead of failing
+    return next();
+  }
+  
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
       return res
@@ -131,7 +151,21 @@ app.use((error, req, res, next) => {
         .json({ error: "File too large. Maximum size is 10MB." });
     }
   }
-  res.status(500).json({ error: error.message });
+  
+  // Log detailed error information in development
+  if (process.env.NODE_ENV === 'development') {
+    console.error('Unhandled error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  } else {
+    // In production, don't expose stack traces
+    console.error('Unhandled error:', error.message);
+    res.status(500).json({ 
+      error: 'Internal server error'
+    });
+  }
 });
 
 // Connect to MongoDB
