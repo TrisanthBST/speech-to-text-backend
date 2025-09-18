@@ -90,7 +90,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
       user: req.user._id,
       filename,
       originalName: originalname,
-      filePath, // We'll keep this for reference but the file is gone
+      // Note: We don't store filePath since we immediately delete the file after reading into memory
       transcription: '', // Will be updated after processing
       fileSize: size,
       mimeType: mimetype,
