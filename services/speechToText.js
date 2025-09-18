@@ -12,7 +12,7 @@ export async function transcribeAudio(filePath) {
     
     // Check if file exists first
     if (!fs.existsSync(filePath)) {
-      throw new Error(`Audio file not found: ${filePath}`);
+      throw new Error(`Audio file not found: ${filePath}. This may indicate a timing issue or file cleanup problem.`);
     }
     
     const fileStats = fs.statSync(filePath);

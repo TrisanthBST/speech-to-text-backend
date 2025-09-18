@@ -48,6 +48,23 @@ router.post('/', upload.single('audio'), async (req, res) => {
     const { filename, originalname, path: filePath, size, mimetype } = req.file;
     const { source = 'upload', language = 'en-US' } = req.body;
     
+    // Validate that the file exists and is accessible
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Uploaded file not found on server'
+      });
+    }
+    
+    // Get actual file stats
+    const fileStats = fs.statSync(filePath);
+    if (fileStats.size === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Uploaded file is empty'
+      });
+    }
+    
     // Set processing status initially
     const transcription = new Transcription({
       user: req.user._id,
@@ -77,6 +94,15 @@ router.post('/', upload.single('audio'), async (req, res) => {
       transcription.status = 'failed';
       await transcription.save();
       
+      // Clean up the uploaded file
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (cleanupError) {
+        console.warn('Failed to clean up uploaded file:', cleanupError.message);
+      }
+      
       return res.status(500).json({ 
         success: false,
         message: transcriptionResult.error || 'Transcription failed' 
@@ -91,6 +117,15 @@ router.post('/', upload.single('audio'), async (req, res) => {
     transcription.metadata.processingTime = processingTime;
     
     await transcription.save();
+    
+    // Clean up the uploaded file after successful processing
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to clean up uploaded file:', cleanupError.message);
+    }
 
     res.json({
       success: true,
@@ -108,6 +143,17 @@ router.post('/', upload.single('audio'), async (req, res) => {
   } catch (error) {
     console.error('Transcription error:', error);
     
+    // Clean up the uploaded file if it exists
+    if (req.file && req.file.path) {
+      try {
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      } catch (cleanupError) {
+        console.warn('Failed to clean up uploaded file:', cleanupError.message);
+      }
+    }
+    
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({ 
         success: false,
@@ -123,7 +169,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
       });
     }
     
-    if (error.message && error.message.includes('not found')) {
+    if (error.message && (error.message.includes('not found') || error.code === 'ENOENT')) {
       return res.status(404).json({ 
         success: false,
         message: 'Audio file not found. Please try uploading again.' 
