@@ -114,9 +114,25 @@ router.post('/', upload.single('audio'), async (req, res) => {
       });
     }
     
+    // Handle specific error types
+    if (error.message && error.message.includes('API key')) {
+      return res.status(401).json({ 
+        success: false,
+        message: 'Speech-to-text service authentication failed. Please contact administrator.' 
+      });
+    }
+    
+    if (error.message && error.message.includes('not found')) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Audio file not found. Please try uploading again.' 
+      });
+    }
+    
     res.status(500).json({ 
       success: false,
-      message: 'Failed to process audio file' 
+      message: 'Failed to process audio file',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

@@ -4,6 +4,7 @@ import cors from "cors";
 import mongoose from "mongoose";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import transcriptionRoutes from "./routes/transcriptions.js";
 import authRoutes from "./routes/auth.js";
@@ -52,6 +53,41 @@ app.get("/", (req, res) => {
     status: "running",
     timestamp: new Date().toISOString()
   });
+});
+
+// Health check with dependencies
+app.get("/health", async (req, res) => {
+  try {
+    // Check MongoDB connection
+    const dbState = mongoose.connection.readyState;
+    const dbStatus = dbState === 1 ? 'connected' : dbState === 0 ? 'disconnected' : dbState === 2 ? 'connecting' : 'disconnecting';
+    
+    // Check uploads directory
+    const uploadsDir = fs.existsSync('./uploads');
+    
+    // Check environment variables
+    const envCheck = {
+      DEEPGRAM_API_KEY: !!process.env.DEEPGRAM_API_KEY,
+      MONGODB_URI: !!process.env.MONGODB_URI,
+      JWT_SECRET: !!process.env.JWT_SECRET
+    };
+    
+    res.json({ 
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        database: dbStatus,
+        uploadsDirectory: uploadsDir,
+        environment: envCheck
+      }
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(500).json({ 
+      status: "unhealthy",
+      error: error.message
+    });
+  }
 });
 
 // Routes

@@ -10,11 +10,27 @@ export async function transcribeAudio(filePath) {
     console.log('[Transcription] Starting transcription for:', filePath);
     console.log('[Transcription] Deepgram API Key configured:', !!DEEPGRAM_API_KEY);
     
+    // Check if file exists first
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Audio file not found: ${filePath}`);
+    }
+    
+    const fileStats = fs.statSync(filePath);
+    console.log('[Transcription] File size:', fileStats.size, 'bytes');
+    
+    if (fileStats.size === 0) {
+      throw new Error('Audio file is empty');
+    }
+    
+    if (fileStats.size > 10 * 1024 * 1024) {
+      throw new Error('Audio file too large (max 10MB)');
+    }
+    
     if (DEEPGRAM_API_KEY) {
       console.log('[Transcription] Using Deepgram provider');
       try {
         const result = await transcribeWithDeepgram(filePath);
-        console.log('[Transcription] Deepgram success:', result.text.substring(0, 100) + '...');
+        console.log('[Transcription] Deepgram success:', result.text?.substring(0, 100) + '...');
         return { success: true, provider: 'deepgram', transcription: result.text, confidence: result.confidence, duration: result.duration };
       } catch (deepgramError) {
         console.error('[Transcription] Deepgram failed:', {
