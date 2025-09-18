@@ -151,12 +151,23 @@ mongoose
     }
   });
 
+// Log environment information
+console.log('Environment variables check:', {
+  NODE_ENV: process.env.NODE_ENV,
+  MONGODB_URI: process.env.MONGODB_URI ? 'Set' : 'Not set',
+  JWT_SECRET: process.env.JWT_SECRET ? 'Set' : 'Not set',
+  DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY ? 'Set' : 'Not set',
+  FRONTEND_URL: process.env.FRONTEND_URL
+});
+
 // For Vercel serverless deployment, we don't need to start the server
 // app.listen is only used in local development
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
+} else {
+  console.log(`Server configured for Vercel deployment on port ${PORT}`);
 }
 
 // Export for Vercel serverless functions

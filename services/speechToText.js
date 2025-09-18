@@ -48,16 +48,26 @@ export async function transcribeAudio(filePath) {
         });
         console.warn('[Transcription] Falling back to mock service');
         // Fall back to mock service if Deepgram fails
-        const audioBuffer = fs.readFileSync(filePath);
-        const mockTranscription = await mockTranscriptionService(audioBuffer);
-        return { success: true, provider: 'mock', transcription: mockTranscription.text, confidence: mockTranscription.confidence, duration: mockTranscription.duration };
+        try {
+          const audioBuffer = fs.readFileSync(filePath);
+          const mockTranscription = await mockTranscriptionService(audioBuffer);
+          return { success: true, provider: 'mock', transcription: mockTranscription.text, confidence: mockTranscription.confidence, duration: mockTranscription.duration };
+        } catch (mockError) {
+          console.error('[Transcription] Mock service also failed:', mockError);
+          throw new Error(`Both Deepgram and mock services failed: ${mockError.message}`);
+        }
       }
     }
 
     console.warn('[Transcription] No Deepgram API key configured, using mock service');
-    const audioBuffer = fs.readFileSync(filePath);
-    const mockTranscription = await mockTranscriptionService(audioBuffer);
-    return { success: true, provider: 'mock', transcription: mockTranscription.text, confidence: mockTranscription.confidence, duration: mockTranscription.duration };
+    try {
+      const audioBuffer = fs.readFileSync(filePath);
+      const mockTranscription = await mockTranscriptionService(audioBuffer);
+      return { success: true, provider: 'mock', transcription: mockTranscription.text, confidence: mockTranscription.confidence, duration: mockTranscription.duration };
+    } catch (mockError) {
+      console.error('[Transcription] Mock service failed:', mockError);
+      throw new Error(`Mock service failed: ${mockError.message}`);
+    }
   } catch (error) {
     console.error('[Transcription] Critical error:', {
       message: error.message,

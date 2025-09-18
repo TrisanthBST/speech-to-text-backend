@@ -24,8 +24,9 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'audio/webm'];
-    if (allowedTypes.includes(file.mimetype)) {
+    const allowedTypes = ['audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'audio/webm', 'audio/webm;codecs=opus'];
+    // Also allow generic audio type
+    if (allowedTypes.includes(file.mimetype) || file.mimetype.startsWith('audio/')) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type. Only audio files are allowed.'), false);
@@ -126,6 +127,14 @@ router.post('/', upload.single('audio'), async (req, res) => {
       return res.status(404).json({ 
         success: false,
         message: 'Audio file not found. Please try uploading again.' 
+      });
+    }
+    
+    // Handle multer errors
+    if (error instanceof multer.MulterError) {
+      return res.status(400).json({ 
+        success: false,
+        message: `File upload error: ${error.message}`
       });
     }
     
