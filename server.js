@@ -24,7 +24,7 @@ const corsOptions = {
     if (origin.includes('localhost')) return callback(null, true);
     
     // Allow Vercel frontend deployments (with dynamic subdomain)
-    if (origin.includes('speech-to-text-frontend-h4m3') && origin.includes('vercel.app')) {
+    if (origin.includes('speech-to-text-frontend') && origin.includes('vercel.app')) {
       return callback(null, true);
     }
     
@@ -37,7 +37,8 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
@@ -81,9 +82,13 @@ mongoose
     console.error("MongoDB connection error:", error);
   });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// For Vercel serverless deployment, we don't need to start the server
+// app.listen is only used in local development
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 // Export for Vercel serverless functions
 export default app;
