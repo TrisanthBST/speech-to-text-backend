@@ -87,21 +87,21 @@ router.post('/', upload.single('audio'), async (req, res) => {
     // Process transcription
     const startTime = Date.now();
     const transcriptionResult = await transcribeAudio(filePath);
+    
+    // Clean up the uploaded file after processing (regardless of success or failure)
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (cleanupError) {
+      console.warn('Failed to clean up uploaded file:', cleanupError.message);
+    }
     const processingTime = Date.now() - startTime;
     
     if (!transcriptionResult.success) {
       // Update status to failed
       transcription.status = 'failed';
       await transcription.save();
-      
-      // Clean up the uploaded file
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      } catch (cleanupError) {
-        console.warn('Failed to clean up uploaded file:', cleanupError.message);
-      }
       
       return res.status(500).json({ 
         success: false,
@@ -117,15 +117,6 @@ router.post('/', upload.single('audio'), async (req, res) => {
     transcription.metadata.processingTime = processingTime;
     
     await transcription.save();
-    
-    // Clean up the uploaded file after successful processing
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (cleanupError) {
-      console.warn('Failed to clean up uploaded file:', cleanupError.message);
-    }
 
     res.json({
       success: true,
@@ -142,17 +133,6 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
   } catch (error) {
     console.error('Transcription error:', error);
-    
-    // Clean up the uploaded file if it exists
-    if (req.file && req.file.path) {
-      try {
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
-      } catch (cleanupError) {
-        console.warn('Failed to clean up uploaded file:', cleanupError.message);
-      }
-    }
     
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({ 

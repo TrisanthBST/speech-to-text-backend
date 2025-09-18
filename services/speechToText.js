@@ -15,6 +15,14 @@ export async function transcribeAudio(filePath) {
       throw new Error(`Audio file not found: ${filePath}. This may indicate a timing issue or file cleanup problem.`);
     }
     
+    // Verify file is accessible by trying to get stats
+    let stats;
+    try {
+      stats = fs.statSync(filePath);
+    } catch (statError) {
+      throw new Error(`Cannot access file stats for ${filePath}: ${statError.message}`);
+    }
+    
     const fileStats = fs.statSync(filePath);
     console.log('[Transcription] File size:', fileStats.size, 'bytes');
     
@@ -27,6 +35,11 @@ export async function transcribeAudio(filePath) {
     }
     
     // Try to read file to check if it's accessible
+    // Check again that file exists before reading
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Audio file disappeared before reading: ${filePath}`);
+    }
+    
     try {
       const fileBuffer = fs.readFileSync(filePath);
       console.log('[Transcription] File read successfully, buffer size:', fileBuffer.length, 'bytes');
