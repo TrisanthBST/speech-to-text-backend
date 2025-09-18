@@ -138,6 +138,14 @@ router.post('/', upload.single('audio'), async (req, res) => {
       });
     }
     
+    // Handle detailed transcription errors
+    if (error.name === 'TranscriptionError') {
+      return res.status(500).json({ 
+        success: false,
+        message: error.message
+      });
+    }
+    
     res.status(500).json({ 
       success: false,
       message: 'Failed to process audio file',

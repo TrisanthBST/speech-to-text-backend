@@ -28,7 +28,8 @@ export async function transcribeAudio(filePath) {
     
     // Try to read file to check if it's accessible
     try {
-      fs.readFileSync(filePath);
+      const fileBuffer = fs.readFileSync(filePath);
+      console.log('[Transcription] File read successfully, buffer size:', fileBuffer.length, 'bytes');
     } catch (fileReadError) {
       throw new Error(`Cannot read audio file: ${fileReadError.message}`);
     }
@@ -75,7 +76,20 @@ export async function transcribeAudio(filePath) {
       filePath: filePath,
       fileExists: fs.existsSync(filePath)
     });
-    return { success: false, error: error.response?.data?.message || error.message || 'Transcription failed' };
+    
+    // Return a more detailed error message
+    let errorMessage = 'Transcription failed';
+    if (error.response?.data?.message) {
+      errorMessage = `API Error: ${error.response.data.message}`;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    // Create a custom error type for better handling
+    const transcriptionError = new Error(errorMessage);
+    transcriptionError.name = 'TranscriptionError';
+    
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -174,6 +188,8 @@ async function transcribeWithDeepgram(filePath) {
         throw new Error(`Deepgram API error: ${error.response.data?.message || 'Bad request'}`);
       } else if (error.response.status === 429) {
         throw new Error('Deepgram API rate limit exceeded');
+      } else {
+        throw new Error(`Deepgram API error (${error.response.status}): ${error.response.data?.message || error.response.statusText || 'Unknown error'}`);
       }
     } else if (error.code === 'ECONNREFUSED') {
       throw new Error('Cannot connect to Deepgram API - network error');
@@ -184,6 +200,6 @@ async function transcribeWithDeepgram(filePath) {
     }
     
     console.error('[Deepgram] Unexpected error:', error);
-    throw error;
+    throw new Error(`Deepgram unexpected error: ${error.message}`);
   }
 }
