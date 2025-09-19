@@ -17,7 +17,7 @@ const transcriptionSchema = new mongoose.Schema({
   },
   filePath: {
     type: String,
-    required: true
+    required: false // Make this optional since we're using memory storage
   },
   transcription: {
     type: String,
