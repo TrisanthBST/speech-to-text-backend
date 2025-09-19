@@ -12,17 +12,9 @@ const router = express.Router();
 router.use(authenticate);
 
 // Configure multer for file uploads (scoped to this router)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
-});
-
+// Use memory storage instead of disk storage for better compatibility with serverless environments
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'audio/webm', 'audio/webm;codecs=opus'];
     // Also allow generic audio type
@@ -45,54 +37,31 @@ router.post('/', upload.single('audio'), async (req, res) => {
       });
     }
 
-    const { filename, originalname, path: filePath, size, mimetype } = req.file;
+    // With memory storage, the file is already in memory as a buffer
+    const { buffer: fileBuffer, originalname, mimetype, size } = req.file;
     const { source = 'upload', language = 'en-US' } = req.body;
     
-    // Read file content into memory immediately and delete it right away
-    let fileBuffer;
-    try {
-      // Read file content into memory directly without separate existence check
-      // This prevents race conditions where file might be deleted between check and read
-      fileBuffer = fs.readFileSync(filePath);
-      
-      // Immediately delete the uploaded file
-      fs.unlinkSync(filePath);
-      
-      // Validate file size from buffer
-      if (fileBuffer.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Uploaded file is empty'
-        });
-      }
-      
-      if (fileBuffer.length > 10 * 1024 * 1024) {
-        return res.status(413).json({ 
-          success: false,
-          message: 'File too large. Maximum size is 10MB.' 
-        });
-      }
-    } catch (fileError) {
-      // Handle file read or delete errors
-      console.error('File operation error:', fileError);
-      if (fileError.code === 'ENOENT') {
-        return res.status(404).json({
-          success: false,
-          message: 'Uploaded file not found. Please try uploading again.'
-        });
-      }
-      return res.status(500).json({
+    // Validate file size from buffer
+    if (fileBuffer.length === 0) {
+      return res.status(400).json({
         success: false,
-        message: 'Failed to process uploaded file: ' + fileError.message
+        message: 'Uploaded file is empty'
+      });
+    }
+    
+    if (fileBuffer.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ 
+        success: false,
+        message: 'File too large. Maximum size is 10MB.' 
       });
     }
     
     // Set processing status initially
     const transcription = new Transcription({
       user: req.user._id,
-      filename,
+      filename: originalname, // Use originalname as filename since we're not saving to disk
       originalName: originalname,
-      // Note: We don't store filePath since we immediately delete the file after reading into memory
+      // Note: We don't store filePath since we're using memory storage
       transcription: '', // Will be updated after processing
       fileSize: fileBuffer.length,
       mimeType: mimetype,
@@ -159,13 +128,6 @@ router.post('/', upload.single('audio'), async (req, res) => {
       return res.status(401).json({ 
         success: false,
         message: 'Speech-to-text service authentication failed. Please contact administrator.' 
-      });
-    }
-    
-    if (error.message && (error.message.includes('not found') || error.code === 'ENOENT')) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Audio file not found. Please try uploading again.' 
       });
     }
     
@@ -288,19 +250,8 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    // Delete the file from filesystem if it exists
-    if (transcription.filePath) {
-      try {
-        // Attempt to delete the file without checking if it exists first
-        // This prevents race conditions and simplifies the code
-        fs.unlinkSync(transcription.filePath);
-      } catch (fileError) {
-        // It's okay if the file doesn't exist, just log a warning
-        if (fileError.code !== 'ENOENT') {
-          console.warn('Could not delete file:', fileError.message);
-        }
-      }
-    }
+    // Note: With memory storage, we don't need to delete any files from the filesystem
+    // The file was processed directly from memory and never saved to disk
 
     await Transcription.findByIdAndDelete(req.params.id);
 
