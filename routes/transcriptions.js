@@ -48,41 +48,38 @@ router.post('/', upload.single('audio'), async (req, res) => {
     const { filename, originalname, path: filePath, size, mimetype } = req.file;
     const { source = 'upload', language = 'en-US' } = req.body;
     
-    // Validate that the file exists and is accessible
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        message: 'Uploaded file not found on server'
-      });
-    }
-    
-    // Get actual file stats
-    const fileStats = fs.statSync(filePath);
-    if (fileStats.size === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Uploaded file is empty'
-      });
-    }
-    
-    // Read file content into memory immediately
+    // Read file content into memory immediately and delete it right away
     let fileBuffer;
     try {
+      // Read file content into memory
       fileBuffer = fs.readFileSync(filePath);
-    } catch (readError) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to read uploaded file'
-      });
-    }
-    
-    // Clean up the uploaded file immediately after reading into memory
-    try {
+      
+      // Immediately delete the uploaded file
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-    } catch (cleanupError) {
-      console.warn('Failed to clean up uploaded file:', cleanupError.message);
+      
+      // Validate file size from buffer
+      if (fileBuffer.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Uploaded file is empty'
+        });
+      }
+      
+      if (fileBuffer.length > 10 * 1024 * 1024) {
+        return res.status(413).json({ 
+          success: false,
+          message: 'File too large. Maximum size is 10MB.' 
+        });
+      }
+    } catch (fileError) {
+      // Handle file read or delete errors
+      console.error('File operation error:', fileError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to process uploaded file'
+      });
     }
     
     // Set processing status initially
@@ -92,7 +89,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
       originalName: originalname,
       // Note: We don't store filePath since we immediately delete the file after reading into memory
       transcription: '', // Will be updated after processing
-      fileSize: size,
+      fileSize: fileBuffer.length,
       mimeType: mimetype,
       language,
       status: 'processing',
