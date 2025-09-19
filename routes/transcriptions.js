@@ -51,13 +51,12 @@ router.post('/', upload.single('audio'), async (req, res) => {
     // Read file content into memory immediately and delete it right away
     let fileBuffer;
     try {
-      // Read file content into memory
+      // Read file content into memory directly without separate existence check
+      // This prevents race conditions where file might be deleted between check and read
       fileBuffer = fs.readFileSync(filePath);
       
       // Immediately delete the uploaded file
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+      fs.unlinkSync(filePath);
       
       // Validate file size from buffer
       if (fileBuffer.length === 0) {
@@ -76,9 +75,15 @@ router.post('/', upload.single('audio'), async (req, res) => {
     } catch (fileError) {
       // Handle file read or delete errors
       console.error('File operation error:', fileError);
+      if (fileError.code === 'ENOENT') {
+        return res.status(404).json({
+          success: false,
+          message: 'Uploaded file not found. Please try uploading again.'
+        });
+      }
       return res.status(500).json({
         success: false,
-        message: 'Failed to process uploaded file'
+        message: 'Failed to process uploaded file: ' + fileError.message
       });
     }
     
@@ -284,11 +289,16 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Delete the file from filesystem if it exists
-    if (transcription.filePath && fs.existsSync(transcription.filePath)) {
+    if (transcription.filePath) {
       try {
+        // Attempt to delete the file without checking if it exists first
+        // This prevents race conditions and simplifies the code
         fs.unlinkSync(transcription.filePath);
       } catch (fileError) {
-        console.warn('Could not delete file:', fileError.message);
+        // It's okay if the file doesn't exist, just log a warning
+        if (fileError.code !== 'ENOENT') {
+          console.warn('Could not delete file:', fileError.message);
+        }
       }
     }
 
